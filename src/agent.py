@@ -4,28 +4,29 @@ from google import genai
 from google.genai import types
 
 from src.config import GEMINI_API_KEY, LLM_MODEL_NAME
-from src.retriever import search_documents, get_indexed_sources
+from src.retriever import search_hybrid, get_indexed_sources
 
 # Initialize Gemini client
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 
 def search_knowledge_base(query: str, num_results: int = 5) -> str:
-    """Search the indexed documents for relevant information using semantic similarity.
+    """Search the indexed documents using Hybrid Search (BM25 keyword + Dense vector search fused via RRF).
 
     Args:
-        query: The natural language query to search for in the documents.
+        query: The natural language or keyword query to search for in the documents.
         num_results: Number of document sections to return (max 10).
     """
     num_results = min(num_results, 10)
-    results = search_documents(query, n_results=num_results)
+    results = search_hybrid(query, n_results=num_results)
 
     if not results:
         return "No relevant results found. Try another query."
 
-    formatted = f"Found {len(results)} relevant document sections:\n\n"
+    formatted = f"Found {len(results)} relevant document sections (Hybrid RRF Search):\n\n"
     for i, r in enumerate(results, 1):
-        formatted += f"---- Result {i} (relevance: {r['relevance_score']:.2f}) ---\n"
+        score_info = f"rrf_score: {r['rrf_score']:.4f}" if "rrf_score" in r else f"relevance: {r.get('relevance_score', 0):.2f}"
+        formatted += f"---- Result {i} ({score_info}) ---\n"
         formatted += f"source: {r['source']}\n"
         formatted += f"content:\n{r['content']}\n\n"
 

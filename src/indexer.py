@@ -1,16 +1,9 @@
-"""Document indexing module."""
-
 from pathlib import Path
 from src.chunker import chunk_text
-from src.retriever import collection, embedding_model
+from src.retriever import collection, embedding_model, init_bm25_index
 
 
 def load_and_index_document(docs_path: str | Path):
-    """Parses and indexes documents from a target directory into ChromaDB.
-
-    Args:
-        docs_path: Directory containing documents to index.
-    """
     docs_dir = Path(docs_path)
 
     if not docs_dir.exists():
@@ -49,5 +42,8 @@ def load_and_index_document(docs_path: str | Path):
 
             except Exception as e:
                 print(f"Error processing {file_path}: {e}")
+
+    # Refresh in-memory BM25 index with newly indexed documents
+    init_bm25_index(force_rebuild=True)
 
     print(f"\nTotal Chunks indexed: {indexed_count}")
