@@ -56,7 +56,7 @@ Query → Gemini (gemini-3.5-flash)
 cd rag-demo
 uv sync                          # installs from uv.lock
 cp .env.example .env             # add your GEMINI_API_KEY here
-uv run basic_rag_agent.py        # indexes docs/ and starts the query loop
+uv run main.py                   # indexes docs/ and starts the query loop
 ```
 
 On first run, it indexes everything under `docs/` into `./chroma_db`. Add your own markdown/text files there to query different content.
