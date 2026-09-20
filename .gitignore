@@ -1,0 +1,11 @@
+# Database & index storage
+chroma_db/
+
+# Environment variables & keys
+.env
+
+# Python & Environment
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
