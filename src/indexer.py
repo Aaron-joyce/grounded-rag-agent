@@ -1,7 +1,17 @@
 from pathlib import Path
 from src.chunker import chunk_text
 from src.retriever import collection, embedding_model, init_bm25_index
+from pypdf import PdfReader
 
+def extract_from_file(file_path: Path) -> str:
+    if file_path.suffix in [".txt", ".md", ".py", ".js", ".ts"]:
+        return file_path.read_text(encoding="utf-8")
+    elif file_path.suffix == ".pdf":
+        reader = PdfReader(file_path)
+        # Page-by-page extraction (efficient for multi-page PDFs)
+        pages_text = [page.extract_text() or "" for page in reader.pages]
+        return "\n\n".join(pages_text)
+    return ""
 
 def load_and_index_document(docs_path: str | Path):
     docs_dir = Path(docs_path)
@@ -14,9 +24,9 @@ def load_and_index_document(docs_path: str | Path):
     indexed_count = 0
 
     for file_path in docs_dir.rglob("*"):
-        if file_path.is_file() and file_path.suffix in [".txt", ".md", ".py", ".js", ".ts"]:
-            try:
-                content = file_path.read_text(encoding="utf-8")
+        try:
+            if file_path.is_file():
+                content = extract_from_file(file_path)
 
                 if len(content) < 50:
                     continue
@@ -40,8 +50,8 @@ def load_and_index_document(docs_path: str | Path):
                 indexed_count += len(chunks)
                 print(f"Indexed: {file_path.name} ({len(chunks)} chunks)")
 
-            except Exception as e:
-                print(f"Error processing {file_path}: {e}")
+        except Exception as e:
+            print(f"Error processing {file_path}: {e}")
 
     # Refresh in-memory BM25 index with newly indexed documents
     init_bm25_index(force_rebuild=True)

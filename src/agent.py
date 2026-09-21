@@ -11,12 +11,6 @@ client = genai.Client(api_key=GEMINI_API_KEY)
 
 
 def search_knowledge_base(query: str, num_results: int = 5) -> str:
-    """Search the indexed documents using Hybrid Search (BM25 keyword + Dense vector search fused via RRF).
-
-    Args:
-        query: The natural language or keyword query to search for in the documents.
-        num_results: Number of document sections to return (max 10).
-    """
     num_results = min(num_results, 10)
     results = search_hybrid(query, n_results=num_results)
 
@@ -34,7 +28,6 @@ def search_knowledge_base(query: str, num_results: int = 5) -> str:
 
 
 def list_available_documents() -> str:
-    """List all document filenames that have been indexed in the knowledge base."""
     sources = get_indexed_sources()
 
     if not sources:
@@ -48,14 +41,6 @@ def list_available_documents() -> str:
 
 
 def run_rag_agent(question: str) -> str:
-    """Execute the RAG agent on a user query with tool calling.
-
-    Args:
-        question: User query string.
-
-    Returns:
-        Generated answer text from Gemini.
-    """
     print("\n" + "=" * 30)
     print("RAG AGENT")
     print("=" * 30)
@@ -69,6 +54,7 @@ When answering questions:
 2. BE THOROUGH - If initial results are weak, try alternate search terms.
 3. CITE SOURCES - Reference which documents your information comes from.
 4. BE HONEST - State clearly if the requested information is absent.
+5. USE ONLY THE RESOURCES PROVIDED: use only the documents provided to answer and queries. If a question does not have a relevant resource, respond with "I could not find information about that in your uploaded notebook documents."
 
 Format your response as:
 **Answer:** [Your comprehensive answer]
