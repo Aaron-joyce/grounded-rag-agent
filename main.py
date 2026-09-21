@@ -11,7 +11,8 @@ def main():
     load_and_index_document(docs_path)
 
     questions = [
-        "How do I install this project?",
+        # "How do I install this project?",
+        "Give 5 line description about providence"
     ]
 
     for q in questions:

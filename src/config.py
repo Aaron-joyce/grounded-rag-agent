@@ -11,7 +11,7 @@ DEFAULT_DOCS_DIR = BASE_DIR / "docs"
 
 # Model configurations
 EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
-LLM_MODEL_NAME = "gemini-3.6-flash"
+LLM_MODEL_NAME = "gemini-3.5-flash-lite"
 
 # Gemini API Key
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")

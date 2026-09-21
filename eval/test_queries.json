@@ -1,0 +1,38 @@
+[
+  {
+    "id": 1,
+    "question": "How do I install this project?",
+    "is_trick": false,
+    "expected_source": "api.md"
+  },
+  {
+    "id": 2,
+    "question": "What Python version and prerequisites are required?",
+    "is_trick": false,
+    "expected_source": "api.md"
+  },
+  {
+    "id": 3,
+    "question": "what is providence in 5 lines?",
+    "is_trick": false,
+    "expected_source": "providence.pdf"
+  },
+  {
+    "id": 4,
+    "question": "What is the market provdence is trying to capture in 5 lines?",
+    "is_trick": false,
+    "expected_source": "providence.pdf"
+  },
+  {
+    "id": 5,
+    "question": "What was Apple's total revenue in 2024?",
+    "is_trick": true,
+    "expected_source": null
+  },
+  {
+    "id": 6,
+    "question": "How do I configure multi-region Kubernetes clusters on AWS?",
+    "is_trick": true,
+    "expected_source": null
+  }
+]
