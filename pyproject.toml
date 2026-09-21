@@ -1,5 +1,5 @@
 [project]
-name = "rag-demo"
+name = "grounded-rag-agent"
 version = "0.1.0"
 description = "Agentic RAG system using Gemini function-calling, ChromaDB, and local sentence-transformer embeddings"
 readme = "README.md"

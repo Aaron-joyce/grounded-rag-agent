@@ -1,80 +1,136 @@
-# Agentic RAG Demo
+# Grounded Hybrid RAG Agent
 
-A Retrieval-Augmented Generation system where the LLM decides *when* and *what* to retrieve, rather than retrieval happening on a fixed pipeline before every query. Built to understand how agentic tool-calling changes RAG behavior compared to naive "always retrieve, always stuff into context" implementations.
+An agentic Retrieval-Augmented Generation (RAG) engine combining **Dense Semantic Vector Search** (ChromaDB + `sentence-transformers`) and **Sparse Keyword Search** (BM25) fused via **Reciprocal Rank Fusion (RRF)**. Features strict zero-hallucination guardrails, multi-format PDF/MD ingestion, and an automated evaluation suite.
 
-## How It Works
+---
 
-Most basic RAG tutorials retrieve on every query regardless of whether retrieval is needed. This implementation instead exposes retrieval as **tools** the model can choose to call:
-
-- `search_knowledge_base(query)` — semantic search over the indexed document chunks
-- `list_available_documents()` — lets the model check what's actually in the knowledge base before deciding how to answer
-
-Gemini (`gemini-3.5-flash`) receives these as native function-calling tools and decides during generation whether to invoke them, inspect the results, and then produce a grounded answer with source citations — rather than retrieval being hardcoded into every request.
-
-## Architecture
+## 🏗️ Architecture Overview
 
 ```
-Query → Gemini (gemini-3.5-flash)
-              │
-              ├─ decides to call search_knowledge_base()
-              │        │
-              │        ▼
-              │   Chroma DB (persistent, local)
-              │        │
-              │        ▼
-              │   top-k chunks (Cosine HNSW search)
-              │
-              ▼
-        Grounded answer + cited sources
+                      ┌────────────────────────┐
+                      │     User Question      │
+                      └───────────┬────────────┘
+                                  │
+                                  ▼
+                   ┌──────────────────────────────┐
+                   │  Gemini Agent / Tool Router  │
+                   └──────────────┬───────────────┘
+                                  │
+                                  ▼
+                     search_knowledge_base(query)
+                                  │
+            ┌─────────────────────┴─────────────────────┐
+            │                                           │
+            ▼                                           ▼
+ ┌──────────────────────┐                    ┌──────────────────────┐
+ │ Dense Vector Search  │                    │ Sparse BM25 Search   │
+ │ (ChromaDB HNSW)      │                    │ (rank_bm25 Okapi)    │
+ └──────────┬───────────┘                    └──────────┬───────────┘
+            │ Top-10 Chunks                             │ Top-10 Chunks
+            └─────────────────────┬─────────────────────┘
+                                  │
+                                  ▼
+                 ┌─────────────────────────────────┐
+                 │  Reciprocal Rank Fusion (RRF)   │
+                 │  Score = 1/(60+r_v) + 1/(60+r_b)│
+                 └────────────────┬────────────────┘
+                                  │
+                                  ▼
+                         Top-5 Fused Chunks
+                                  │
+                                  ▼
+                 ┌─────────────────────────────────┐
+                 │ Grounded Answer + Citations     │
+                 │       OR Exact Refusal          │
+                 └─────────────────────────────────┘
 ```
 
-**Indexing (offline, run once per document set):**
-1. Documents in `docs/` are loaded and split with a custom sentence-aware chunker (`chunk_text`) — ~500-character chunks with 50-character overlap, splitting on sentence boundaries (`. `, `? `, `\n`) rather than hard character cutoffs, so chunks don't get sliced mid-sentence.
-2. Each chunk is embedded locally using `sentence-transformers` (`all-MiniLM-L6-v2`) — no API call needed for embeddings.
-3. Chunks + embeddings are upserted into a persistent Chroma collection (`./chroma_db`).
+---
 
-**Query time:**
-1. User question goes to `gemini-3.5-flash` along with the two tool definitions.
-2. The model decides whether the question needs retrieval, and if so, calls `search_knowledge_base` with a query it constructs itself.
-3. Chroma returns the top-k most similar chunks (cosine similarity, HNSW index).
-4. The model reads the retrieved chunks and generates an answer, citing which source chunk(s) it used.
+## 🚀 Key Features
 
-## Tech Stack
+* **Hybrid Search (BM25 + Vector RRF):** Fuses dense embeddings (`all-MiniLM-L6-v2`) with sparse keyword matching (`rank-bm25`) using Reciprocal Rank Fusion ($k=60$), eliminating keyword omission errors.
+* **Strict Zero-Hallucination Guardrails:** System prompts enforce strict context locking. If a query is out-of-scope, the agent outputs an exact refusal message instead of hallucinating.
+* **Multi-Format Ingestion Pipeline:** Parses `.pdf` (page-by-page via `pypdf`), `.md`, `.txt`, `.py`, `.js`, and `.ts` with sentence-aware chunking.
+* **Automated Evaluation Suite (`eval/eval.py`):** Measures Retrieval Recall @ 5, Refusal Compliance Accuracy %, and Query Latency against a benchmark test set.
+* **Modular Package Architecture:** Clean directory layout (`src/config.py`, `src/chunker.py`, `src/retriever.py`, `src/indexer.py`, `src/agent.py`) with `main.py` entry point.
 
-| Component | Choice | Why |
-|---|---|---|
-| LLM | Gemini `gemini-3.5-flash` via `google-genai` | Native function-calling support, fast/cheap enough for iterative testing |
-| Embeddings | `sentence-transformers` (`all-MiniLM-L6-v2`) | Runs locally — no per-chunk API cost or latency during indexing |
-| Vector store | ChromaDB (persistent, local) | Zero-ops local vector DB, good enough for a single-machine demo |
-| Env/package management | `uv` | Fast, lockfile-based reproducible installs |
+---
 
-## Running It
+## 📊 Benchmark Evaluation Results
 
-**Requirements:** Python 3.14, [`uv`](https://docs.astral.sh/uv/) installed, a `GEMINI_API_KEY`.
+The evaluation suite (`eval/eval.py`) validates retrieval recall and refusal accuracy against ground-truth and out-of-scope trick queries:
 
+| Metric | Score | Target | Status |
+| :--- | :--- | :--- | :--- |
+| **Retrieval Recall @ 5** | **100.0%** (4/4) | $\ge$ 85.0% | 🟢 **PASS** |
+| **Refusal Accuracy** | **100.0%** (2/2) | 100.0% | 🟢 **PASS** |
+
+### Detailed Evaluation Output
+
+| ID | Type | Question | Expected Source / Action | Retrieved Sources | Status |
+|---|---|---|---|---|---|
+| 1 | Standard | How do I install this project? | `api.md` | `api.md, providence.pdf` | **PASS** |
+| 2 | Standard | What Python version and prerequisites are required? | `api.md` | `api.md, providence.pdf` | **PASS** |
+| 3 | Standard | What is Providence in 5 lines? | `providence.pdf` | `providence.pdf` | **PASS** |
+| 4 | Standard | What is the market Providence is trying to capture in 5 lines? | `providence.pdf` | `providence.pdf` | **PASS** |
+| 5 | Trick | What was Apple's total revenue in 2024? | `REFUSAL` | `providence.pdf` | **PASS** |
+| 6 | Trick | How do I configure multi-region Kubernetes clusters on AWS? | `REFUSAL` | `providence.pdf` | **PASS** |
+
+---
+
+## 📦 Project Structure
+
+```
+grounded-rag-agent/
+├── src/
+│   ├── __init__.py          # Package marker
+│   ├── config.py            # Model configurations & environment setup
+│   ├── chunker.py           # Sentence-aware text chunking logic
+│   ├── retriever.py         # ChromaDB HNSW vector store, BM25, & RRF algorithm
+│   ├── indexer.py           # Multi-format document parser & indexing pipeline
+│   └── agent.py             # Gemini LLM client, tool definition, & grounding prompts
+├── docs/                    # Document corpus (.pdf, .md, .txt)
+├── eval/
+│   ├── test_queries.json    # Benchmark dataset (grounded + trick queries)
+│   ├── eval.py              # Automated evaluation test harness
+│   └── results.md           # Benchmark summary report
+├── main.py                  # Main entry point to index and query
+├── pyproject.toml           # Project dependencies & metadata
+└── .env.example             # Template for API keys
+```
+
+---
+
+## 🛠️ Quickstart & Setup
+
+### Prerequisites
+- Python 3.14+
+- [`uv`](https://docs.astral.sh/uv/) package manager installed
+- A Google Gemini API Key (`GEMINI_API_KEY`)
+
+### 1. Clone & Install Dependencies
 ```bash
-cd rag-demo
-uv sync                          # installs from uv.lock
-cp .env.example .env             # add your GEMINI_API_KEY here
-uv run main.py                   # indexes docs/ and starts the query loop
+git clone https://github.com/your-username/grounded-rag-agent.git
+cd grounded-rag-agent
+uv sync
 ```
 
-On first run, it indexes everything under `docs/` into `./chroma_db`. Add your own markdown/text files there to query different content.
+### 2. Configure Environment Variables
+```bash
+cp .env.example .env
+```
+Edit `.env` and set your key:
+```env
+GEMINI_API_KEY=your_actual_gemini_api_key
+```
 
-## Design Notes / Trade-offs
+### 3. Index Documents & Run Agent
+```bash
+uv run main.py
+```
 
-- **Tool-calling retrieval vs. always-retrieve:** giving the model the choice to retrieve (and to call `list_available_documents` first) means it can reason about what's actually available before searching, instead of blindly retrieving top-k chunks for every query — including ones that don't need retrieval at all.
-- **Local embeddings over API embeddings:** avoids per-chunk API costs and network latency during indexing, at the cost of lower embedding quality than a larger hosted model. Fine for a small demo corpus; would reconsider for a larger or more nuanced knowledge base.
-- **Sentence-aware chunking:** naive fixed-character chunking risks splitting a sentence in half across two chunks, which can hurt retrieval relevance. Respecting sentence boundaries costs a bit of complexity in the chunker for better chunk coherence.
-
-## Known Limitations
-
-- Single-machine, local-only — no deployment/serving layer (e.g. no API wrapper around the agent loop yet)
-- Small demo corpus (`docs/api.md`) — not yet tested against a larger or more heterogeneous document set
-- No conversation memory across turns — each query is currently independent
-
-## What I'd Build Next
-
-- Wrap the agent loop in a minimal API (FastAPI) so it's callable as a service, not just a terminal script
-- Add conversation history so follow-up questions can reference prior turns
-- Evaluate retrieval quality more rigorously (e.g. a small labeled query set) rather than just eyeballing answers
+### 4. Run Automated Evaluation Suite
+```bash
+uv run python eval/eval.py
+```
